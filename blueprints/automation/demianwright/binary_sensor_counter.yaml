@@ -1,0 +1,87 @@
+blueprint:
+  name: Binary Sensor Counter
+  description: |
+    Modify a counter helper based on a binary sensor or an input boolean state change (e.g. a contact sensor opens).
+    **Version**: 1.0.0
+  author: Demian Wright
+  homeassistant:
+    min_version: "0.9.0"
+  domain: automation
+  input:
+    sensor_entity:
+      name: Sensor entity
+      description: Sensor that triggers this automation.
+      selector:
+        entity:
+          domain:
+            - binary_sensor
+            - input_boolean
+    trigger_state:
+      name: Trigger condition
+      description: When to modify the counter.
+      default: "to_on"
+      selector:
+        select:
+          options:
+            - label: Sensor turns on
+              value: "to_on"
+            - label: Sensor turns off
+              value: "to_off"
+            - label: Sensor turns on or off
+              value: "to_either"
+    trigger_duration:
+      name: Trigger duration
+      description: How long sensor state has to change for before modifying the counter. A short duration (e.g., 1 second) prevents unnecessary triggers, such as when a door slams shut, bounces back, and closes again (which would normally modify the counter multiple times). However, for tracking something like a button press, use a 0-second duration to trigger the automation on every state change, even rapid ones from button mashing.
+      default:
+        hours: 0
+        minutes: 0
+        seconds: 0
+      selector:
+        duration:
+    counter_helper:
+      name: Counter helper
+      description: Counter helper to modify.
+      selector:
+        entity:
+          domain: counter
+    counter_modification:
+      name: Modification type
+      description: How to modify the counter helper.
+      default: "increment"
+      selector:
+        select:
+          options:
+            - label: Increment by 1
+              value: "increment"
+            - label: Decrement by 1
+              value: "decrement"
+mode: parallel
+max: 1000
+trigger:
+  - platform: state
+    entity_id:
+      - !input sensor_entity
+    from: "off"
+    to: "on"
+    for: !input trigger_duration
+  - platform: state
+    entity_id:
+      - !input sensor_entity
+    from: "on"
+    to: "off"
+    for: !input trigger_duration
+action:
+  - variables:
+      trigger_state: !input trigger_state
+      modification: !input counter_modification
+  - if:
+      - condition: template
+        value_template: "{{ trigger_state == 'to_either' or (trigger_state == 'to_on' and trigger.id == '0') or (trigger_state == 'to_off' and trigger.id == '1') }}"
+    then:
+      - service: >
+          {% if modification == "increment" %}
+            counter.increment
+          {% else %}
+            counter.decrement
+          {% endif %}
+        entity_id: !input counter_helper
